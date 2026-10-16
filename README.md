@@ -56,6 +56,7 @@ src/
   for it. Its ~109 MB of wasm loads from jsDelivr (self-hosting it is a later option). Cached LiteRT-LM model files
   can be deleted from the model panel.
 - Performance experiments (Settings) apply to Transformers.js only.
-- With thinking mode on, the model's reasoning is streamed inline with the answer.
+- With thinking mode on, the model's reasoning streams into a collapsible block that folds away once the answer
+  starts. It is saved with the chat but not sent back to the model in later turns.
 - Chat sessions live in this browser's localStorage (sidebar → Chats). Attachments are not persisted;
   after a reload only the text history remains.

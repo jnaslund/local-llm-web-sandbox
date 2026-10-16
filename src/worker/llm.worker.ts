@@ -26,6 +26,64 @@ declare const self: DedicatedWorkerGlobalScope
 type Processor = Awaited<ReturnType<typeof AutoProcessor.from_pretrained>>
 type Model = Awaited<ReturnType<typeof Gemma4ForConditionalGeneration.from_pretrained>>
 
+type Tokenizer = NonNullable<Processor['tokenizer']>
+
+/**
+ * Gemma 4 wraps its reasoning in `<|channel>thought\n…<channel|>`. Both markers are special tokens, which TextStreamer
+ * drops without flushing its word buffer, so text from either side would merge. This flushes at each marker and
+ * reports every piece of text with the channel it belongs to (minus the `thought\n` header).
+ */
+class ChannelStreamer extends TextStreamer {
+  private open: bigint
+  private close: bigint
+  private onText: (text: string, thought: boolean) => void
+  private inThought = false
+  /** Text seen since the channel opened, held back until it's clear whether it is the `thought\n` header. */
+  private head: string | null = null
+
+  constructor(
+    tokenizer: Tokenizer,
+    onText: (text: string, thought: boolean) => void,
+    options: ConstructorParameters<typeof TextStreamer>[1],
+  ) {
+    super(tokenizer, options)
+    this.open = BigInt(tokenizer.convert_tokens_to_ids('<|channel>'))
+    this.close = BigInt(tokenizer.convert_tokens_to_ids('<channel|>'))
+    this.onText = onText
+  }
+
+  put(value: bigint[][]) {
+    const token = value[0]?.length === 1 ? value[0][0] : undefined
+    if (token === this.open || token === this.close) {
+      if (this.token_cache.length > 0) {
+        const text = this.tokenizer.decode(this.token_cache, this.decode_kwargs)
+        this.on_finalized_text(text.slice(this.print_len), false)
+        this.token_cache = []
+        this.print_len = 0
+      }
+      this.flushHead()
+      this.inThought = token === this.open
+      this.head = this.inThought ? '' : null
+    }
+    super.put(value)
+  }
+
+  on_finalized_text(text: string, streamEnd: boolean) {
+    if (this.head !== null) {
+      this.head += text
+      if (this.head !== 'thought\n' && 'thought\n'.startsWith(this.head) && !streamEnd) return
+      text = this.head.replace(/^thought\n/, '')
+      this.head = null
+    }
+    if (text) this.onText(text, this.inThought)
+  }
+
+  private flushHead() {
+    if (this.head) this.onText(this.head, this.inThought)
+    this.head = null
+  }
+}
+
 const DEVICE = 'webgpu'
 
 let processor: Processor | null = null
@@ -264,7 +322,7 @@ async function generate(requestId: string, messages: WireMessage[], settings: Ge
   let firstTokenAt: number | null = null
   let sessionTimeAtFirstToken: Record<string, number> = {}
   let outputTokens = 0
-  const streamer = new TextStreamer(tokenizer, {
+  const streamer = new ChannelStreamer(tokenizer, (text, thought) => post({ type: 'token', requestId, text, thought }), {
     skip_prompt: true,
     skip_special_tokens: true,
     token_callback_function: () => {
@@ -273,9 +331,6 @@ async function generate(requestId: string, messages: WireMessage[], settings: Ge
         sessionTimeAtFirstToken = { ...sessionTime }
       }
       outputTokens++
-    },
-    callback_function: (text: string) => {
-      if (text) post({ type: 'token', requestId, text })
     },
   })
 

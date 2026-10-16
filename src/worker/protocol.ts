@@ -124,7 +124,8 @@ export type WorkerResponse =
     }
   | { type: 'load-done'; metrics: LoadMetrics }
   | { type: 'unloaded' }
-  | { type: 'token'; requestId: string; text: string }
+  /** `thought`: the text is the model's reasoning (thinking mode), not part of the answer. */
+  | { type: 'token'; requestId: string; text: string; thought?: boolean }
   | { type: 'generate-done'; requestId: string; metrics: GenerationMetrics }
   | {
       type: 'error'

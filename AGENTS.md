@@ -65,14 +65,18 @@ metrics and the benchmark/report flow matter as much as the chat.
 - **LiteRT-LM stateful conversations** (Settings → LiteRT-LM → Keep conversation state, on by default): chats pass
   their session id as `conversationId`, and the worker keeps **one** live `Conversation` (KV cache on the GPU). It
   continues it only if the id and the settings match and the request's history (minus the new user turn) is exactly
-  what it has seen. That history includes the assistant text as streamed, which is what the chat store sends back.
+  what it has seen. That history includes the assistant answer as streamed (without reasoning), which is what the chat store sends back.
   Any mismatch drops it and rebuilds from the full history; that covers regenerate, deleted turns, system prompt and
   settings changes, and switching chats. Interrupted turns aren't kept. Settings are part of the key because
   `maxOutputTokens`/sampler are fixed per conversation. Stateless requests (benchmarks, setting off) also drop it, so
   only one conversation ever exists. Replies show "KV reused"/"KV rebuilt" (`reusedContext`), and with reuse
   `promptTokens` counts only the new turn.
-- **LiteRT-LM streaming**: answer text is in `chunk.content`, reasoning in `chunk.channels.thought` (shown inline,
-  then `---`, then the answer). Chunks aren't guaranteed to be single tokens; token counts come from
+- **Thinking output**: workers tag streamed text with `thought: true` for reasoning. The store keeps it in
+  `ChatMessage.thinking`, apart from `text`, and only `text` goes back to the model (Gemma's template strips thinking
+  from past turns anyway). On Transformers.js, Gemma 4 emits `<|channel>thought\n…<channel|>`. Both markers are special
+  tokens that `TextStreamer` drops *without flushing its word buffer*, so `ChannelStreamer` in the worker flushes at
+  each marker and strips the `thought\n` header.
+- **LiteRT-LM streaming**: answer text is in `chunk.content`, reasoning in `chunk.channels.thought`. Chunks aren't guaranteed to be single tokens; token counts come from
   `getBenchmarkInfo()`. Its "GetProfileSummary not implemented for GpuArtisan" console warnings are harmless.
 - Inspect Transformers.js internals in `node_modules/@huggingface/transformers/src` (readable JS) and
   `node_modules/onnxruntime-web/dist/ort.webgpu.js` (unminified) rather than guessing.

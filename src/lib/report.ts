@@ -41,6 +41,7 @@ export function buildReport(includeTranscript: boolean) {
       ? getActiveSession().messages.map((m) => ({
           role: m.role,
           text: m.text,
+          thinking: m.thinking,
           attachments: m.attachments?.map((a) => a.kind),
           metrics: m.metrics,
           error: m.error,

@@ -12,7 +12,7 @@ import type {
 import { inspectLiteRtModel } from './litertCache'
 
 type PendingGeneration = {
-  onToken: (text: string) => void
+  onToken: (text: string, thought: boolean) => void
   resolve: (metrics: GenerationMetrics) => void
   reject: (err: Error) => void
 }
@@ -77,7 +77,7 @@ function onMessage(event: MessageEvent<WorkerResponse>) {
       session.set({ status: 'idle', loadedModelId: null })
       break
     case 'token':
-      pending.get(msg.requestId)?.onToken(msg.text)
+      pending.get(msg.requestId)?.onToken(msg.text, !!msg.thought)
       break
     case 'generate-done':
       pending.get(msg.requestId)?.resolve(msg.metrics)
@@ -188,7 +188,7 @@ export function interrupt() {
 export function generate(
   messages: WireMessage[],
   settings: GenerationSettings,
-  onToken: (text: string) => void = () => {},
+  onToken: (text: string, thought: boolean) => void = () => {},
   /** LiteRT-LM: keep and reuse the conversation (KV cache) under this id. Ignored by Transformers.js. */
   conversationId?: string,
 ): Promise<GenerationMetrics> {

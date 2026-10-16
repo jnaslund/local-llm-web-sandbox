@@ -41,7 +41,7 @@ async function runAssistantTurn(sessionId: string) {
     const metrics = await generate(
       toWire(history, settings.systemPrompt),
       generationSettings(settings),
-      (text) => useChat.getState().appendText(sessionId, assistantId, text),
+      (text, thought) => useChat.getState().appendText(sessionId, assistantId, text, thought),
       settings.litertStateful ? sessionId : undefined,
     )
     useChat.getState().patch(sessionId, assistantId, { metrics, pending: false })

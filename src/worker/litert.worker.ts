@@ -227,7 +227,6 @@ async function generate(requestId: string, messages: WireMessage[], settings: Ge
   try {
     stage = 'generate'
     const reader = conv.sendMessageStreaming(message).getReader()
-    let thinking = false
     try {
       while (!interrupted) {
         const { done, value } = await reader.read()
@@ -236,12 +235,11 @@ async function generate(requestId: string, messages: WireMessage[], settings: Ge
         if (!thought && !text) continue
         firstTokenAt ??= performance.now()
         chunks++
-        // Reasoning is streamed inline (as with Transformers.js), separated from the answer by a rule.
-        if (thought) thinking = true
-        const sep = thinking && !thought && text ? '\n\n---\n\n' : ''
-        if (sep) thinking = false
-        output += sep + thought + text
-        post({ type: 'token', requestId, text: sep + thought + text })
+        if (thought) post({ type: 'token', requestId, text: thought, thought: true })
+        if (text) {
+          output += text
+          post({ type: 'token', requestId, text })
+        }
       }
     } catch (err) {
       if (!interrupted) throw err
@@ -278,7 +276,8 @@ async function generate(requestId: string, messages: WireMessage[], settings: Ge
     console.debug('[litert worker] generation metrics', metrics, { chunks })
 
     // An interrupted turn may leave a partial reply in the conversation; don't try to continue from it.
-    // The UI sends back exactly the streamed text as the assistant turn, so that's what the next request must match.
+    // The UI sends back exactly the streamed answer (without reasoning) as the assistant turn, so that's what the next
+    // request must match.
     if (conversationId && !interrupted && output) {
       live = {
         id: conversationId,

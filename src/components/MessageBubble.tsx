@@ -1,11 +1,38 @@
+import { useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { formatMs, formatProfile, formatRuntimeInfo, formatTps } from '../lib/format'
 import type { ChatMessage } from '../state/chat'
 
+/** The model's reasoning: expanded while it streams, collapsed once the answer starts (unless toggled by hand). */
+function Thinking({ text, active }: { text: string; active: boolean }) {
+  const [toggled, setToggled] = useState<boolean | null>(null)
+  const open = toggled ?? active
+
+  return (
+    <div className="w-full rounded-xl border border-dashed border-zinc-300 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+      <button
+        type="button"
+        onClick={() => setToggled(!open)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left font-medium hover:text-zinc-900 dark:hover:text-zinc-200"
+      >
+        <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
+        {active ? <span className="animate-pulse">Thinking…</span> : 'Thought process'}
+      </button>
+      {open && (
+        <div className="prose prose-sm max-w-none border-t border-dashed border-zinc-300 px-3 py-2 text-xs text-zinc-600 dark:prose-invert dark:border-zinc-700 dark:text-zinc-400">
+          <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user'
   const m = message.metrics
+  const thinking = !isUser && message.thinking?.trim()
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -22,7 +49,9 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           ),
         )}
 
-        {(message.text || message.pending || isUser) && (
+        {thinking && <Thinking text={thinking} active={!!message.pending && !message.text} />}
+
+        {(message.text || (message.pending && !thinking) || isUser) && (
           <div
             className={`rounded-2xl px-4 py-2.5 text-sm ${
               isUser

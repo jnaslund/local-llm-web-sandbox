@@ -15,6 +15,8 @@ export type ChatMessage = {
   id: string
   role: 'user' | 'assistant'
   text: string
+  /** Assistant reasoning (thinking mode), kept apart from the answer and not sent back to the model. */
+  thinking?: string
   attachments?: Attachment[]
   metrics?: GenerationMetrics
   error?: string
@@ -44,7 +46,7 @@ type ChatStore = {
   rename: (id: string, title: string) => void
   add: (sessionId: string, msg: ChatMessage) => void
   patch: (sessionId: string, id: string, patch: Partial<ChatMessage>) => void
-  appendText: (sessionId: string, id: string, text: string) => void
+  appendText: (sessionId: string, id: string, text: string, thought?: boolean) => void
   removeFrom: (sessionId: string, id: string) => void
   setModel: (sessionId: string, modelId: string) => void
 }
@@ -164,8 +166,12 @@ export const useChat = create<ChatStore>()(
         patch: (sessionId, id, patch) =>
           mapMessages(sessionId, (ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m))),
 
-        appendText: (sessionId, id, text) =>
-          mapMessages(sessionId, (ms) => ms.map((m) => (m.id === id ? { ...m, text: m.text + text } : m))),
+        appendText: (sessionId, id, text, thought) =>
+          mapMessages(sessionId, (ms) =>
+            ms.map((m) =>
+              m.id !== id ? m : thought ? { ...m, thinking: (m.thinking ?? '') + text } : { ...m, text: m.text + text },
+            ),
+          ),
 
         removeFrom: (sessionId, id) =>
           mapMessages(sessionId, (ms) => {
